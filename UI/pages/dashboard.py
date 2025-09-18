@@ -1,101 +1,52 @@
-# dashboard.py
+# ui/pages/dashboard.py
+
+import streamlit as st
 import sys
 import os
 
-# Add parent folder to path to access settings.py
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# This adds the project root to the Python path to allow importing from 'modules'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from settings import (
-    call_medgemma_api,
-    load_bart_pipeline,
-    load_medgemma_text_model,
-    load_medgemma_multimodal,
-)
+from modules.data_loader import get_patient_list, load_patient_data, format_patient_summary
+from modules.ai_model import get_relevant_info, proactive_risk_analysis
 
-import streamlit as st
-import plotly.express as px
-from PIL import Image
+st.set_page_config(page_title="Copilot Dashboard", page_icon="🩺", layout="wide")
+st.title("Clinical Copilot Dashboard")
 
-def show_dashboard():
-    # Logo
-    try:
-        logo = Image.open("logo.jpg")
-        st.image(logo, width=120)
-    except:
-        st.write("🩺 Clinical Copilot")
+# --- Sidebar for Patient Selection ---
+st.sidebar.header("Patient Selection")
+patient_list = get_patient_list()
+if not patient_list:
+    st.error("No patient data found. Make sure your `data/fhir_records` folder is populated with JSON files.")
+    st.stop()
 
-    st.title("Clinical Copilot Dashboard")
+selected_patient_id = st.sidebar.selectbox("Choose a patient record:", patient_list)
 
-    # Sidebar Inputs
-    st.sidebar.header("Doctor's Query")
-    text_prompt = st.sidebar.text_area("Enter patient's complaint, notes, or question:", height=150)
-    image_input = st.sidebar.file_uploader("Upload scan/image (optional)", type=["png","jpg","jpeg"])
+# --- Main Dashboard ---
+if selected_patient_id:
+    patient_data = load_patient_data(selected_patient_id)
+    
+    # Proactive Risk Analysis
+    with st.expander("🚨 Proactive AI Risk Analysis", expanded=True):
+        with st.spinner("Scanning for potential risks..."):
+            risks = proactive_risk_analysis(patient_data)
+            st.warning(risks)
 
-    # API Button
-    if st.sidebar.button("Analyze with MedGemma API"):
-        if not text_prompt and image_input is None:
-            st.sidebar.warning("⚠️ Please enter text or upload image.")
-        else:
-            with st.spinner("🩺 Calling MedGemma API..."):
-                try:
-                    result_text = call_medgemma_api(text_prompt, image_input)
-                    st.subheader("🧠 MedGemma Insight (via API)")
-                    st.success(result_text)
-                except Exception as e:
-                    st.error(f"Error calling API: {e}")
+    col1, col2 = st.columns([1, 2])
 
-    # Local Model Button
-    if st.sidebar.button("Analyze with MedGemma Local"):
-        if not text_prompt and image_input is None:
-            st.sidebar.warning("⚠️ Need text or image.")
-        else:
-            with st.spinner("⚙️ Running MedGemma locally..."):
-                if image_input:
-                    processor, model = load_medgemma_multimodal()
-                    img = Image.open(image_input).convert("RGB")
-                    inputs = processor(images=img, text=text_prompt, return_tensors="pt").to("cuda")
-                    outputs = model.generate(**inputs, max_length=512)
-                    result_text = processor.decode(outputs[0], skip_special_tokens=True)
-                else:
-                    text_model = load_medgemma_text_model()
-                    out = text_model(text_prompt, max_length=256, do_sample=True, temperature=0.7)
-                    result_text = out[0]['generated_text']
-                st.subheader("🧠 MedGemma Local Insight")
-                st.success(result_text)
-
-    # BART Summarizer
-    if st.sidebar.button("Summarize with BART"):
-        if not text_prompt.strip():
-            st.sidebar.warning("⚠️ Enter some patient notes first.")
-        else:
-            with st.spinner("🤖 Summarizing..."):
-                summarizer = load_bart_pipeline()
-                summary = summarizer(text_prompt, max_length=120, min_length=40, do_sample=False)
-                st.subheader("🧠 BART Summary")
-                st.info(summary[0]['summary_text'])
-
-    # Example Dashboard Panels
-    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Temperature", "98.6 °F")
-        st.metric("BP", "120/80 mmHg")
+        st.subheader("Patient Summary")
+        st.markdown(format_patient_summary(patient_data))
+
     with col2:
-        st.write("🧪 Labs")
-        st.write("- Hb: 13.5 g/dL")
-        st.write("- Sugar: 95 mg/dL")
-    with col3:
-        st.write("📝 Notes")
-        st.write("Allergy: Penicillin")
+        st.subheader("Ask the AI Copilot")
+        query = st.text_area("Enter your question about this patient:", height=100)
 
-    # Plotly 3D Chart
-    st.markdown("---")
-    df = px.data.iris()
-    fig = px.scatter_3d(df, x='sepal_length', y='sepal_width', z='petal_length',
-                        color='species', size='petal_width')
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Footer
-    st.markdown(
-        "<hr><div style='text-align: center; color: grey;'>Built with ❤️ at Hackathon 2025</div>",
-        unsafe_allow_html=True
-    )
+        if st.button("Get AI Insights"):
+            if query:
+                with st.spinner("Analyzing records..."):
+                    answer = get_relevant_info(patient_data, query)
+                    st.success("Analysis Complete!")
+                    st.markdown(answer)
+            else:
+                st.warning("Please enter a question.")
