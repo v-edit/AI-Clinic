@@ -159,7 +159,7 @@ def load_custom_css():
         padding: 2rem;
         border-radius: 20px;
         box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-        border: 1px solid #e1e8ed;
+        border: 1px solid #000000;
     }
     
     .login-title {
@@ -244,7 +244,7 @@ def load_custom_css():
     }
     
     .ai-response {
-        background: #f8f9fa;
+        background: #000000;
         border-left: 4px solid #00b894;
         padding: 1rem;
         border-radius: 5px;
@@ -263,7 +263,7 @@ def load_custom_css():
     
     .patient-card {
         background: white;
-        border: 1px solid #e1e8ed;
+        border: 1px solid #000000;
         border-radius: 10px;
         padding: 1rem;
         margin: 0.5rem 0;
